@@ -12,6 +12,7 @@ import os
 import unicodedata
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 OUT = os.environ.get("MICROCAP_OUT") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "microcap-data.json")
@@ -143,6 +144,7 @@ def main():
     chg = [float(x["chg"]) for x in items if isinstance(x["chg"], (int, float))]
     payload = {
         "updated": dates[-1],
+        "built_at": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
         "count": len(items),
         "avg_cap": round(sum(x["cap"] for x in items) / len(items) / 1e8, 2),
         "median_cap": round(sorted(x["cap"] for x in items)[len(items) // 2] / 1e8, 2),
