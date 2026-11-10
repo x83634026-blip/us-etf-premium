@@ -1,15 +1,20 @@
-﻿# -*- coding: utf-8 -*-
-"""Build microcap monitor data.
+# -*- coding: utf-8 -*-
+"""构建微盘股监测数据。
 
-- 鍙?A 鑲★紙鍓旈櫎鍖椾氦鎵€銆佸墧闄ら€€甯傛暣鐞嗭級甯傚€兼渶灏忕殑 400 鍙?- 骞冲潎鎬诲競鍊?= 400 鍙€诲競鍊肩畻鏈钩鍧?- 鑷缓銆屽井鐩樿偂绛夋潈鎸囨暟銆嶏細400 鍙瓑鏉冦€佹瘡鏃ュ啀骞宠　鐨勬敹鐩婇摼寮忔寚鏁帮紙鍩烘湡 1000锛?- 闄勶細鐢ㄥ綋鍓?400 鍙垚鍒嗚偂鐨勫巻鍙插墠澶嶆潈鏀剁洏浠峰洖绠楃殑杩戜技搴忓垪锛堝浐瀹氭垚鍒嗭級
+口径：沪深 A 股中剔除北交所、ST/*ST、退市整理股后，总市值最小的 400 只。
+- 平均总市值 = 400 只总市值的算术平均
+- 微盘等权指数 = 400 只等权收益的链式指数（基期 1000）
+- 历史段使用当前 400 只成分回算（近似，存在成分变动与幸存者偏差）
 """
 import concurrent.futures
 import json
 import os
+import unicodedata
 import urllib.parse
 import urllib.request
 
-OUT = os.environ.get("MICROCAP_OUT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "microcap-data.json")
+OUT = os.environ.get("MICROCAP_OUT") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "microcap-data.json")
 UA = {"User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/"}
 FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
 
@@ -45,6 +50,12 @@ def is_bse(code):
     return code.startswith(("4", "8", "92"))
 
 
+def is_excluded_name(name):
+    """ST / *ST / SST / S*ST / 退市整理（xx退、退市xx）等一律剔除。"""
+    n = unicodedata.normalize("NFKC", name or "").upper()
+    return ("ST" in n) or ("退" in n)
+
+
 def pick(rows, n=400):
     valid = []
     for x in rows:
@@ -54,7 +65,7 @@ def pick(rows, n=400):
             price = float(x.get("f2"))
         except (TypeError, ValueError):
             continue
-        if is_bse(code) or cap <= 0 or price <= 0 or "閫€" in name or "ST" in name.upper():
+        if is_bse(code) or cap <= 0 or price <= 0 or is_excluded_name(name):
             continue
         valid.append({
             "code": code, "name": name, "cap": cap, "price": price,
@@ -94,9 +105,8 @@ def main():
     got = sum(1 for v in hist.values() if v)
     print("kline ok:", got, "/", len(items))
 
-    # 閫愭棩鑱氬悎
-    day_ret = {}   # date -> [sum_ret, n]
-    day_cap = {}   # date -> [sum_cap, n]
+    day_ret = {}
+    day_cap = {}
     for it in items:
         ks = hist.get(it["code"]) or []
         prev = None
@@ -106,9 +116,8 @@ def main():
                 a = day_ret.setdefault(date, [0.0, 0])
                 a[0] += r
                 a[1] += 1
-            cap = close * it["shares"]
             b = day_cap.setdefault(date, [0.0, 0])
-            b[0] += cap
+            b[0] += close * it["shares"]
             b[1] += 1
             prev = close
 
@@ -124,20 +133,19 @@ def main():
         avgcap.append(round((c[0] / c[1]) / 1e8, 2) if c and c[1] else None)
         coverage.append(c[1] if c else 0)
 
-    # 鍙繚鐣欒鐩栧害 >= 50% 鐨勫尯闂?    start = 0
+    start = 0
     for i, cov in enumerate(coverage):
         if cov >= len(items) * 0.5:
             start = i
             break
     dates, index, avgcap, coverage = dates[start:], index[start:], avgcap[start:], coverage[start:]
 
-    latest = dates[-1]
     chg = [float(x["chg"]) for x in items if isinstance(x["chg"], (int, float))]
     payload = {
-        "updated": latest,
+        "updated": dates[-1],
         "count": len(items),
         "avg_cap": round(sum(x["cap"] for x in items) / len(items) / 1e8, 2),
-        "median_cap": round(items[len(items) // 2]["cap"] / 1e8, 2),
+        "median_cap": round(sorted(x["cap"] for x in items)[len(items) // 2] / 1e8, 2),
         "total_cap": round(sum(x["cap"] for x in items) / 1e8, 2),
         "ew_chg": round(sum(chg) / len(chg), 2) if chg else None,
         "index": index,
@@ -154,9 +162,9 @@ def main():
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
     print("dates:", len(dates), dates[0], "->", dates[-1])
     print("avg cap:", payload["avg_cap"], "index:", index[-1], "ew_chg:", payload["ew_chg"])
+    print("excluded ST/退 remaining:", sum(1 for c in items if is_excluded_name(c["name"])))
     print("saved:", OUT, os.path.getsize(OUT), "bytes")
 
 
 if __name__ == "__main__":
     main()
-
