@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>微盘股监测 · 400只平均市值与指数</title>
+<meta name="description" content="A股剔除北交所后市值最小的400只股票，平均总市值与自建微盘股等权指数监测。">
+<style>
+  :root{
+    --navy:#0b2239; --ink:#1f2937; --muted:#6b7a8c; --line:#e5ebf2;
+    --bg:#f3f6fa; --accent:#1d4ed8; --red:#c0392b; --green:#0f7a43;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.55;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  .wrap{max-width:1160px;margin:0 auto;padding:28px 20px 44px}
+  .topnav{display:flex;gap:6px;justify-content:center;margin:0 0 12px;flex-wrap:wrap}
+  .topnav a{
+    font-size:13px;color:#54677b;text-decoration:none;padding:7px 14px;border-radius:999px;
+    border:1px solid #d9e1ea;background:#fff;transition:.15s;
+  }
+  .topnav a:hover{border-color:#a9c3dc;color:#0f2f4d}
+  .topnav a.active{background:#0f2f4d;border-color:#0f2f4d;color:#fff;font-weight:600}
+
+  .hero{
+    position:relative;overflow:hidden;text-align:center;color:#fff;
+    border-radius:18px;padding:30px 26px 26px;
+    background:
+      radial-gradient(1100px 260px at 50% -90%, #23527c 0%, transparent 62%),
+      linear-gradient(135deg,#0a2036 0%,#12395c 55%,#0a2540 100%);
+    box-shadow:0 18px 44px -26px rgba(10,37,64,.6);
+  }
+  .hero::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px);
+    background-size:100% 34px;
+  }
+  .hero > *{position:relative;z-index:1}
+  h1{margin:0 0 10px;font-size:clamp(22px,3.1vw,30px);font-weight:700;letter-spacing:.06em}
+  .meta{margin:0;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;color:#a9c3dc;font-size:13.5px}
+  .meta .sep{color:#3f6285}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:11.5px;letter-spacing:.04em;
+    padding:2px 9px;border-radius:999px;border:1px solid transparent;
+  }
+  .pill.live{color:#bfe3d6;border-color:rgba(126,217,176,.35);background:rgba(23,163,110,.16)}
+  .pill.live::before{content:"";width:6px;height:6px;border-radius:50%;background:#43d99a;box-shadow:0 0 6px #43d99a}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0 0}
+  @media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:0 10px 26px -24px rgba(16,40,64,.45)}
+  .kpi .label{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .kpi .value{font-size:26px;font-weight:700;color:#0f2f4d;margin-top:2px;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .kpi .value small{font-size:13px;font-weight:600;color:#7c8a9a;margin-left:3px}
+  .kpi .sub{font-size:12px;color:#8a99aa;margin-top:2px}
+  .kpi .up{color:var(--red)} .kpi .down{color:var(--green)}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:16px;margin-top:14px;box-shadow:0 22px 44px -38px rgba(12,40,70,.5)}
+  .panel-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px 0}
+  .panel-head h2{margin:0;font-size:15px;font-weight:700;color:#0f2f4d;letter-spacing:.02em}
+  .legend{display:flex;gap:16px;align-items:center;font-size:12.5px;color:#5b6b7d;flex-wrap:wrap}
+  .legend i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  .spacer{flex:1}
+  .seg{display:flex;background:#eef2f7;border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;font-size:12.5px;color:#54677b;padding:5px 11px;border-radius:7px;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:#fff;color:#0f2f4d;font-weight:600;box-shadow:0 1px 2px rgba(16,40,64,.14)}
+  .chart-box{position:relative;padding:6px 10px 12px}
+  svg.chart{display:block;width:100%;height:auto}
+  .tip{
+    position:absolute;pointer-events:none;background:rgba(15,42,70,.94);color:#fff;
+    padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.6;white-space:nowrap;
+    transform:translate(-50%,-100%);opacity:0;transition:opacity .12s;z-index:5;
+  }
+  .tip.show{opacity:1}
+  .tip b{font-weight:600}
+
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 18px}
+  .search{position:relative;flex:1 1 220px;min-width:180px}
+  .search input{width:100%;padding:9px 12px 9px 34px;font-size:13.5px;border:1px solid #d9e1ea;border-radius:9px;outline:none;background:#fff}
+  .search input:focus{border-color:#93b4d8;box-shadow:0 0 0 3px rgba(29,78,216,.1)}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#8aa0b6}
+  select{padding:8px 11px;font-size:13px;border:1px solid #d9e1ea;border-radius:9px;background:#fff;color:#334155;outline:none}
+
+  .table-wrap{overflow-x:auto;border-top:1px solid #eef2f7}
+  table{width:100%;border-collapse:collapse}
+  thead th{
+    padding:10px 12px;text-align:right;white-space:nowrap;font-size:12px;font-weight:600;letter-spacing:.04em;
+    color:#e8f1fa;background:linear-gradient(180deg,#16375a,#122e4c);
+  }
+  thead th:first-child,thead th:nth-child(2),thead th:nth-child(3){text-align:left}
+  tbody td{padding:9px 12px;font-size:13.5px;text-align:right;border-top:1px solid #eef2f7;white-space:nowrap;font-variant-numeric:tabular-nums}
+  tbody td:first-child,tbody td:nth-child(2),tbody td:nth-child(3){text-align:left}
+  tbody tr:hover td{background:#f6faff}
+  td.rank{color:#8a9bad;width:52px}
+  a.code{font-family:ui-monospace,Consolas,monospace;color:var(--accent);text-decoration:none;font-weight:600;font-size:13px}
+  a.code:hover{text-decoration:underline}
+  .name{color:#1f2f42}
+  .chg-up{color:var(--red);font-weight:600}
+  .chg-down{color:var(--green);font-weight:600}
+  .chg-flat{color:#8a99aa}
+
+  .note{padding:14px 18px 18px;font-size:12px;color:#8a99aa;line-height:1.9;border-top:1px solid #eef2f7}
+  .note b{color:#5b6b7d;font-weight:600}
+  footer{margin-top:20px;color:#8a99aa;font-size:12px;text-align:center;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="topnav">
+    <a href="../">ETF 溢价榜</a>
+    <a href="./" class="active">微盘股监测</a>
+  </nav>
+
+  <header class="hero">
+    <h1>微盘股监测 · 400 只</h1>
+    <p class="meta">
+      <span class="pill live" id="asofPill">载入中</span>
+      <span id="asofText">--</span>
+      <span class="sep">|</span>
+      <span>A股 · 剔除北交所 / ST</span>
+      <span class="sep">|</span>
+      <span>总市值最小 400 只</span>
+    </p>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi">
+      <div class="label">微盘股平均总市值</div>
+      <div class="value" id="avgCap">--<small>亿元</small></div>
+      <div class="sub" id="medianCap">中位数 --</div>
+    </div>
+    <div class="kpi">
+      <div class="label">自建微盘等权指数</div>
+      <div class="value" id="indexVal">--</div>
+      <div class="sub" id="indexChg">今日 --</div>
+    </div>
+    <div class="kpi">
+      <div class="label">400 只合计总市值</div>
+      <div class="value" id="totalCap">--<small>亿元</small></div>
+      <div class="sub">平均每只约 -- 亿元</div>
+    </div>
+    <div class="kpi">
+      <div class="label">历史区间</div>
+      <div class="value" id="rangeVal" style="font-size:20px">--</div>
+      <div class="sub" id="rangeSub">-- 至今</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>指数与平均市值</h2>
+      <div class="legend">
+        <span><i style="background:#c0392b"></i>微盘等权指数（左轴）</span>
+        <span><i style="background:#5b7a99"></i>平均总市值（右轴，亿元）</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="seg" id="rangeSeg">
+        <button data-range="1y" type="button">近1年</button>
+        <button data-range="3y" type="button">近3年</button>
+        <button data-range="all" type="button" aria-pressed="true">全部</button>
+      </div>
+    </div>
+    <div class="chart-box" id="chartBox">
+      <svg class="chart" id="chart" viewBox="0 0 1000 420" preserveAspectRatio="none" aria-label="微盘股指数与平均市值走势"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head" style="padding-bottom:0">
+      <h2>400 只成分（按总市值升序）</h2>
+      <span style="font-size:12.5px;color:#8a99aa" id="countHint"></span>
+    </div>
+    <div class="toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="搜索代码 / 名称，如 002731、卓锦" autocomplete="off">
+      </div>
+      <select id="sort" aria-label="排序">
+        <option value="cap">总市值：从低到高</option>
+        <option value="cap-desc">总市值：从高到低</option>
+        <option value="chg">涨幅：从高到低</option>
+        <option value="chg-asc">跌幅：从高到低</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">代码</th>
+            <th scope="col">名称</th>
+            <th scope="col">总市值（亿元）</th>
+            <th scope="col">收盘价</th>
+            <th scope="col">涨跌幅</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="note">
+      <b>口径说明：</b>微盘股池 = 沪深 A 股中，剔除北交所、ST/*ST、退市整理股后，总市值最小的 400 只；平均总市值为这 400 只的算术平均。<br>
+      <b>关于指数：</b>图为自建「微盘等权指数」（基期 1000，按 400 只等权日收益链式合成），并非万得官方 8841431.WI。万得微盘股指数属 Wind 收费数据，公开接口无历史；本页历史段使用当前 400 只成分回算，存在幸存者偏差与成分变动误差，仅供趋势参考。<br>
+      <b>数据来源：</b>东方财富公开行情，收盘后更新。
+    </div>
+  </section>
+
+  <footer>数据随收盘更新 · 仅供研究参考，不构成投资建议</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var DATA = null;
+  var state = { q: "", sort: "cap", range: "all" };
+
+  var $ = function (s) { return document.querySelector(s); };
+
+  function fmt(n, d) {
+    if (n === null || n === undefined || isNaN(n)) return "--";
+    return Number(n).toFixed(d === undefined ? 2 : d);
+  }
+  function pct(n) {
+    if (n === null || n === undefined || isNaN(n)) return "--";
+    return (n > 0 ? "+" : "") + Number(n).toFixed(2) + "%";
+  }
+
+  fetch("./microcap-data.json", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (d) {
+      DATA = d;
+      $("#asofPill").textContent = "已更新";
+      $("#asofText").textContent = d.updated;
+      renderKpis();
+      drawChart("all");
+      renderTable();
+    })
+    .catch(function () {
+      $("#asofPill").textContent = "数据加载失败";
+      $("#asofText").textContent = "请刷新重试";
+    });
+
+  function renderKpis() {
+    var d = DATA;
+    $("#avgCap").innerHTML = fmt(d.avg_cap, 2) + "<small>亿元</small>";
+    $("#medianCap").textContent = "中位数 " + fmt(d.median_cap, 2) + " 亿元";
+    $("#indexVal").textContent = fmt(d.index[d.index.length - 1], 2);
+    var chg = d.ew_chg;
+    var el = $("#indexChg");
+    el.innerHTML = "今日等权 " + '<span class="' + (chg > 0 ? "up" : chg < 0 ? "down" : "") + '">' + pct(chg) + "</span>";
+    $("#totalCap").innerHTML = fmt(d.total_cap, 0) + "<small>亿元</small>";
+    $("#totalCap").nextElementSibling.textContent = "平均每只约 " + fmt(d.avg_cap, 2) + " 亿元";
+    $("#rangeVal").textContent = d.dates.length + " 个交易日";
+    $("#rangeSub").textContent = d.dates[0] + " 至今";
+    $("#countHint").textContent = "共 " + d.count + " 只";
+  }
+
+  /* ---------- 图表 ---------- */
+  var W = 1000, H = 420, L = 62, R = 62, T = 20, B = 40;
+  var chartState = null;
+
+  function drawChart(range) {
+    if (!DATA) return;
+    var n = DATA.dates.length;
+    var start = 0;
+    if (range === "1y") start = Math.max(0, n - 244);
+    if (range === "3y") start = Math.max(0, n - 732);
+    var dates = DATA.dates.slice(start);
+    var idx = DATA.index.slice(start);
+    var cap = DATA.avgcap.slice(start).map(function (v) { return v === null ? NaN : v; });
+
+    var iMin = Infinity, iMax = -Infinity, cMin = Infinity, cMax = -Infinity;
+    idx.forEach(function (v) { if (v < iMin) iMin = v; if (v > iMax) iMax = v; });
+    cap.forEach(function (v) { if (!isNaN(v)) { if (v < cMin) cMin = v; if (v > cMax) cMax = v; } });
+    if (!isFinite(iMin)) return;
+    var iPad = (iMax - iMin) * 0.08 || iMax * 0.02;
+    var cPad = (cMax - cMin) * 0.10 || cMax * 0.02;
+    iMin -= iPad; iMax += iPad; cMin -= cPad; cMax += cPad;
+
+    var m = dates.length;
+    function x(i) { return m <= 1 ? L : L + (i / (m - 1)) * (W - L - R); }
+    function yI(v) { return T + (iMax - v) / (iMax - iMin) * (H - T - B); }
+    function yC(v) { return T + (cMax - v) / (cMax - cMin) * (H - T - B); }
+
+    var svg = [];
+    // 网格 + 左轴（指数）
+    var ticks = 5;
+    for (var t = 0; t <= ticks; t++) {
+      var y = T + (H - T - B) * t / ticks;
+      var vi = iMax - (iMax - iMin) * t / ticks;
+      var vc = cMax - (cMax - cMin) * t / ticks;
+      svg.push('<line x1="' + L + '" y1="' + y.toFixed(1) + '" x2="' + (W - R) + '" y2="' + y.toFixed(1) + '" stroke="#eef2f7" stroke-width="1"/>');
+      svg.push('<text x="' + (L - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="#8a99aa">' + vi.toFixed(0) + "</text>");
+      svg.push('<text x="' + (W - R + 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="start" font-size="11" fill="#8a99aa">' + vc.toFixed(0) + "</text>");
+    }
+    // x 轴标签
+    var lab = 5;
+    for (var k = 0; k <= lab; k++) {
+      var xi = Math.round((m - 1) * k / lab);
+      var xx = x(xi);
+      svg.push('<text x="' + xx.toFixed(1) + '" y="' + (H - B + 22) + '" text-anchor="middle" font-size="11" fill="#8a99aa">' + dates[xi].slice(0, 7) + "</text>");
+    }
+
+    // 面积（平均市值）
+    var area = "";
+    var started = false;
+    for (var a = 0; a < m; a++) {
+      if (isNaN(cap[a])) continue;
+      area += (started ? "L" : "M") + x(a).toFixed(1) + "," + yC(cap[a]).toFixed(1);
+      started = true;
+    }
+    if (started) {
+      area += "L" + x(m - 1).toFixed(1) + "," + (H - B) + "L" + x(0).toFixed(1) + "," + (H - B) + "Z";
+      svg.push('<path d="' + area + '" fill="rgba(91,122,153,.08)"/>');
+    }
+
+    function line(vals, yFn, color, width) {
+      var d = "", pen = false;
+      for (var i = 0; i < m; i++) {
+        var v = vals[i];
+        if (v === null || isNaN(v)) { pen = false; continue; }
+        d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + yFn(v).toFixed(1);
+        pen = true;
+      }
+      svg.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + width + '" stroke-linejoin="round" stroke-linecap="round"/>');
+    }
+    line(cap, yC, "#5b7a99", 1.8);
+    line(idx, yI, "#c0392b", 2.2);
+
+    // 末点
+    var last = m - 1;
+    svg.push('<circle cx="' + x(last).toFixed(1) + '" cy="' + yI(idx[last]).toFixed(1) + '" r="3.5" fill="#c0392b"/>');
+    if (!isNaN(cap[last])) {
+      svg.push('<circle cx="' + x(last).toFixed(1) + '" cy="' + yC(cap[last]).toFixed(1) + '" r="3.5" fill="#5b7a99"/>');
+    }
+
+    var el = $("#chart");
+    el.innerHTML = svg.join("");
+    chartState = { dates: dates, idx: idx, cap: cap, x: x, yI: yI, yC: yC, m: m };
+  }
+
+  /* hover */
+  (function hover() {
+    var box = $("#chartBox"), tip = $("#tip");
+    box.addEventListener("mousemove", function (e) {
+      if (!chartState) return;
+      var rect = box.getBoundingClientRect();
+      var scale = W / rect.width;
+      var px = (e.clientX - rect.left) * scale;
+      var m = chartState.m;
+      var i = Math.round((px - L) / (W - L - R) * (m - 1));
+      i = Math.max(0, Math.min(m - 1, i));
+      var cx = chartState.x(i) / scale;
+      var cy = chartState.yI(chartState.idx[i]) / (rect.height / H);
+      tip.innerHTML = "<b>" + chartState.dates[i] + "</b><br>指数 " + fmt(chartState.idx[i], 2) +
+        "<br>平均市值 " + fmt(chartState.cap[i], 2) + " 亿";
+      tip.style.left = cx + "px";
+      tip.style.top = (cy - 10) + "px";
+      tip.classList.add("show");
+    });
+    box.addEventListener("mouseleave", function () { tip.classList.remove("show"); });
+  })();
+
+  /* ---------- 表格 ---------- */
+  function renderTable() {
+    if (!DATA) return;
+    var q = state.q.trim().toLowerCase();
+    var list = DATA.constituents.filter(function (s) {
+      return !q || (s.code + " " + s.name).toLowerCase().indexOf(q) !== -1;
+    });
+    var sort = state.sort;
+    list = list.slice().sort(function (a, b) {
+      if (sort === "cap-desc") return b.cap - a.cap;
+      if (sort === "chg") return (b.chg || -999) - (a.chg || -999);
+      if (sort === "chg-asc") return (a.chg || 999) - (b.chg || 999);
+      return a.cap - b.cap;
+    });
+    $("#tbody").innerHTML = list.map(function (s, i) {
+      var c = s.chg;
+      var cls = c > 0 ? "chg-up" : c < 0 ? "chg-down" : "chg-flat";
+      return "<tr>" +
+        '<td class="rank">' + (i + 1) + "</td>" +
+        '<td><a class="code" href="' + link(s.code) + '" target="_blank" rel="noopener">' + s.code + "</a></td>" +
+        '<td class="name">' + esc(s.name) + "</td>" +
+        "<td>" + fmt(s.cap, 2) + "</td>" +
+        "<td>" + fmt(s.price, 2) + "</td>" +
+        '<td class="' + cls + '">' + pct(c) + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  function link(code) {
+    var m = code.charAt(0) === "6" ? "sh" : "sz";
+    return "https://quote.eastmoney.com/" + m + code + ".html";
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  $("#q").addEventListener("input", function () { state.q = this.value; renderTable(); });
+  $("#sort").addEventListener("change", function () { state.sort = this.value; renderTable(); });
+  Array.prototype.forEach.call($("#rangeSeg").children, function (b) {
+    b.addEventListener("click", function () {
+      state.range = b.dataset.range;
+      Array.prototype.forEach.call($("#rangeSeg").children, function (x) {
+        x.setAttribute("aria-pressed", String(x === b));
+      });
+      drawChart(state.range);
+    });
+  });
+  window.addEventListener("resize", function () { drawChart(state.range); });
+})();
+</script>
+</body>
+</html>
