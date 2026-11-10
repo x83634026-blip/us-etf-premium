@@ -233,7 +233,7 @@
     .then(function (d) {
       DATA = d;
       $("#asofPill").textContent = "已更新";
-      $("#asofText").textContent = d.updated;
+      $("#asofText").textContent = "更新于 " + (d.built_at || d.updated) + " · 行情日 " + d.updated;
       renderKpis();
       drawChart("all");
       renderTable();
