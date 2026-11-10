@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美股ETF 今日溢价榜 · 实时查询</title>
+<meta name="description" content="美股ETF（QDII）今日溢价实时榜，按代码/名称/指数查询，自动刷新，支持分享查询链接。">
+<style>
+  :root{
+    --navy:#0b2239; --navy-2:#123a5e; --ink:#1f2937; --muted:#6b7a8c;
+    --line:#e5ebf2; --bg:#f3f6fa; --accent:#1d4ed8;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.55;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:28px 20px 44px}
+  .topnav{display:flex;gap:6px;justify-content:center;margin:0 0 12px;flex-wrap:wrap}
+  .topnav a{
+    font-size:13px;color:#54677b;text-decoration:none;padding:7px 14px;border-radius:999px;
+    border:1px solid #d9e1ea;background:#fff;transition:.15s;
+  }
+  .topnav a:hover{border-color:#a9c3dc;color:#0f2f4d}
+  .topnav a.active{background:#0f2f4d;border-color:#0f2f4d;color:#fff;font-weight:600}
+
+  /* ---------- 顶部 ---------- */
+  .hero{
+    position:relative;overflow:hidden;text-align:center;color:#fff;
+    border-radius:18px;padding:30px 26px 26px;
+    background:
+      radial-gradient(1100px 260px at 50% -90%, #23527c 0%, transparent 62%),
+      linear-gradient(135deg,#0a2036 0%,#12395c 55%,#0a2540 100%);
+    box-shadow:0 18px 44px -26px rgba(10,37,64,.6);
+  }
+  .hero::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px);
+    background-size:100% 34px;
+  }
+  .hero > *{position:relative;z-index:1}
+  h1{margin:0 0 10px;font-size:clamp(22px,3.1vw,30px);font-weight:700;letter-spacing:.08em}
+  .meta{
+    margin:0;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;
+    color:#a9c3dc;font-size:13.5px;
+  }
+  .meta .sep{color:#3f6285}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:11.5px;letter-spacing:.04em;
+    padding:2px 9px;border-radius:999px;border:1px solid transparent;
+  }
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%}
+  .pill.live{color:#bfe3d6;border-color:rgba(126,217,176,.35);background:rgba(23,163,110,.16)}
+  .pill.live::before{background:#43d99a;box-shadow:0 0 6px #43d99a}
+  .pill.snap{color:#ffe0b3;border-color:rgba(255,183,77,.35);background:rgba(214,138,0,.18)}
+  .pill.snap::before{background:#ffb74d}
+
+  /* ---------- 偏差最小提示条 ---------- */
+  .callout{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    margin-top:16px;padding:13px 18px;background:#fff;
+    border:1px solid var(--line);border-left:3px solid #10b981;border-radius:12px;
+    box-shadow:0 10px 26px -22px rgba(16,40,64,.45);
+  }
+  .callout .label{
+    font-size:12px;color:#fff;letter-spacing:.04em;padding:3px 10px;border-radius:999px;
+    background:linear-gradient(135deg,#0f766e,#0e7490);
+  }
+  .callout a.code{
+    font-family:ui-monospace,Consolas,"SF Mono",monospace;font-size:17px;font-weight:700;
+    color:var(--accent);text-decoration:none;
+  }
+  .callout a.code:hover{text-decoration:underline}
+  .callout .name{font-weight:600;color:#334155}
+  .callout .prem{
+    margin-left:auto;font-weight:700;color:#b45309;background:#fff5e6;
+    border:1px solid #fde3bf;padding:3px 12px;border-radius:999px;font-size:13.5px;
+  }
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:10px 0 18px}
+
+  /* ---------- 工具栏 ---------- */
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .search{position:relative;flex:1 1 230px;min-width:200px}
+  .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#8aa0b6;pointer-events:none}
+  .search input{
+    width:100%;padding:10px 14px 10px 38px;font-size:14px;color:var(--ink);
+    background:#fff;border:1px solid #d9e1ea;border-radius:10px;outline:none;transition:.15s;
+  }
+  .search input:focus{border-color:#93b4d8;box-shadow:0 0 0 3px rgba(29,78,216,.10)}
+  .chips{display:flex;gap:4px;padding:4px;background:#e9eef4;border-radius:10px}
+  .chips button{
+    border:0;background:transparent;padding:6px 12px;border-radius:8px;cursor:pointer;
+    font-size:13px;color:#455a70;white-space:nowrap;
+  }
+  .chips button[aria-pressed="true"]{background:#fff;color:#0f2f4d;font-weight:600;box-shadow:0 1px 2px rgba(16,40,64,.14)}
+  select{
+    padding:9px 12px;font-size:13px;color:#334155;background:#fff;
+    border:1px solid #d9e1ea;border-radius:10px;outline:none;cursor:pointer;
+  }
+  .btn{
+    padding:9px 14px;font-size:13px;font-weight:600;border-radius:10px;cursor:pointer;
+    border:1px solid #cfe0f3;background:#eef6ff;color:#1d4ed8;transition:.15s;
+  }
+  .btn:hover{background:#e2efff}
+  .btn[disabled]{opacity:.6;cursor:progress}
+  .btn.primary{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+  .btn.primary:hover{background:#1a45c0}
+
+  /* ---------- 统计 ---------- */
+  .stats{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+  .stat{
+    background:#fff;border:1px solid var(--line);border-radius:10px;
+    padding:6px 12px;font-size:12.5px;color:var(--muted);
+  }
+  .stat b{margin-left:4px;font-size:14px;color:#0f2f4d;font-variant-numeric:tabular-nums}
+
+  /* ---------- 表格 ---------- */
+  .table-wrap{
+    background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    box-shadow:0 22px 44px -34px rgba(12,40,70,.5);
+  }
+  table{width:100%;border-collapse:collapse}
+  thead th{
+    padding:12px 12px;text-align:left;white-space:nowrap;
+    font-size:12.5px;font-weight:600;letter-spacing:.04em;color:#e8f1fa;
+    background:linear-gradient(180deg,#16375a,#122e4c);
+  }
+  tbody td{
+    padding:11px 12px;font-size:14px;vertical-align:middle;white-space:nowrap;
+    border-top:1px solid #eef2f7;
+  }
+  tbody tr:hover td{background:#f6faff}
+  tbody tr:first-child td{border-top:0}
+  td.rank{width:52px;color:#8a9bad;font-weight:600;font-variant-numeric:tabular-nums}
+  .idx-tag{font-size:12px;color:#4a6076;background:#eff3f8;padding:2px 8px;border-radius:6px}
+  a.code{
+    font-family:ui-monospace,Consolas,"SF Mono",monospace;font-size:14px;font-weight:700;
+    color:var(--accent);text-decoration:none;
+  }
+  a.code:hover{text-decoration:underline}
+  td.etf{min-width:170px;white-space:normal}
+  td.etf a{color:#1f2f42;font-weight:500;text-decoration:none}
+  td.etf a:hover{color:var(--accent)}
+  td.pi{font-size:12.5px;font-variant-numeric:tabular-nums;color:#94a3b3}
+  td.pi .p{color:#334155;font-weight:600}
+  td.pi .slash{margin:0 4px;color:#c3ccd6}
+  .prem{
+    display:inline-block;padding:3px 10px;border-radius:8px;font-weight:700;
+    font-variant-numeric:tabular-nums;font-size:13.5px;
+  }
+  .err{display:flex;align-items:center;gap:8px}
+  .err .num{font-weight:600;color:#334155;font-variant-numeric:tabular-nums;min-width:42px}
+  .err .track{width:48px;height:5px;border-radius:3px;background:#edf1f6;overflow:hidden}
+  .err .track i{display:block;height:100%;border-radius:3px}
+  .err .na{color:#b6c0cc;font-weight:500}
+  .ref{display:inline-block;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .ref.min{background:#e7f8ee;color:#0f7a43;border:1px solid #c7efd8}
+  .ref.low{background:#effaf2;color:#2f8f57;border:1px solid #d4f0dd}
+  .ref.mid{background:#fff5e6;color:#b26a00;border:1px solid #ffe3b8}
+  .ref.high{background:#fdecec;color:#c0392b;border:1px solid #f9cfcf}
+  td.quote{font-size:12.5px;color:#8a99aa}
+  td.quote a{color:#7c8a9a;text-decoration:none;margin-right:10px}
+  td.quote a:hover{color:var(--accent);text-decoration:underline}
+  td.quote a:last-child{margin-right:0}
+  tr.top td{background:#fcfffd}
+  tr.top td.rank{color:#0f7a43}
+
+  .empty{
+    margin:0;padding:44px 20px;text-align:center;color:#8a9bad;font-size:14px;
+    background:#fff;border:1px dashed #d9e1ea;border-radius:14px;
+  }
+
+  footer{margin-top:20px;color:#8a99aa;font-size:12px;text-align:center;line-height:1.9}
+  footer a{color:#6b7d90;text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  /* 复制提示 */
+  .toast{
+    position:fixed;left:50%;bottom:28px;transform:translate(-50%,14px);
+    background:#0f2f4d;color:#fff;font-size:13px;padding:9px 16px;border-radius:10px;
+    box-shadow:0 12px 30px -12px rgba(9,30,50,.6);opacity:0;pointer-events:none;
+    transition:.22s;z-index:50;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  @media (max-width:760px){
+    .wrap{padding:14px 10px 30px}
+    .hero{padding:22px 16px;border-radius:14px}
+    .callout{padding:12px 14px}
+    .callout .prem{margin-left:0}
+    .chips{order:5;width:100%;justify-content:space-between}
+    .chips button{flex:1;padding:6px 8px}
+    .table-wrap{overflow-x:auto;border-radius:12px}
+    table{min-width:900px}
+    .stats{margin-top:2px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="topnav">
+    <a href="./" class="active">ETF 溢价榜</a>
+    <a href="./microcap/">微盘股监测</a>
+  </nav>
+
+  <header class="hero">
+    <h1>美股ETF 今日溢价榜</h1>
+    <p class="meta">
+      <span class="pill snap" id="statusPill">连接中</span>
+      <time id="asof">--</time>
+      <span class="sep">|</span>
+      <span>溢价从低到高</span>
+      <span class="sep">|</span>
+      <span>纳指100 / 标普500 / 美国50</span>
+    </p>
+  </header>
+
+  <section class="callout">
+    <span class="label">今日相对偏差最小</span>
+    <a class="code" id="calloutCode" href="#" target="_blank" rel="noopener">--</a>
+    <span class="name" id="calloutName">--</span>
+    <span class="prem" id="calloutPrem">溢价 --</span>
+  </section>
+
+  <p class="hint">定投参考按今日溢价相对排名分档；长期维度看 1 年跟踪误差，数值越低越稳。</p>
+
+  <section class="toolbar" role="search">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="搜索代码 / 名称 / 指数，如 513650、纳指、南方" autocomplete="off" aria-label="搜索 ETF">
+    </div>
+
+    <div class="chips" id="idxChips" role="group" aria-label="按跟踪指数筛选"></div>
+
+    <select id="sort" aria-label="排序方式">
+      <option value="prem-asc">溢价：从低到高</option>
+      <option value="prem-desc">溢价：从高到低</option>
+      <option value="err-asc">1年跟踪误差：从低到高</option>
+      <option value="default">原始排名</option>
+    </select>
+
+    <button class="btn primary" id="refresh" type="button">刷新</button>
+    <button class="btn" id="share" type="button">复制查询链接</button>
+  </section>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="table-wrap" id="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">排名</th>
+          <th scope="col">跟踪指数</th>
+          <th scope="col">代码</th>
+          <th scope="col">ETF</th>
+          <th scope="col" title="收盘价 / IOPV（参考净值）">价格 / IOPV</th>
+          <th scope="col">今日溢价</th>
+          <th scope="col" title="静态参考：2026-10-23 快照值，年度指标变化慢">1年跟踪误差</th>
+          <th scope="col">定投参考</th>
+          <th scope="col">行情</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <p class="empty" id="empty" hidden>没有匹配的 ETF，试试其他代码、名称或指数。</p>
+
+  <footer id="footer">
+    <span id="sourceNote">行情 / IOPV / 溢价：腾讯财经公开行情</span><br>
+    溢价 = 价格 / IOPV − 1；数据随行情变动，仅供研究参考，不构成投资建议。
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============ 离线快照（2026-10-23 16:15，本地服务不可用时兜底） ============ */
+  var SNAPSHOT = {
+    asof: "2026-10-23 16:15:00",
+    items: [
+      { code: "513650", name: "南方标普500ETF (QDII)", prem: 5.59, err: 2.59 },
+      { code: "159655", name: "华夏标普500ETF (QDII)", prem: 5.88, err: 2.82 },
+      { code: "159612", name: "国泰标普500ETF", prem: 6.61, err: 5.47 },
+      { code: "513500", name: "博时标普500ETF", prem: 6.91, err: 5.44 },
+      { code: "159577", name: "美国50ETF汇添富", prem: 7.16, err: 3.03 },
+      { code: "513850", name: "美国50ETF易方达", prem: 7.56, err: 3.03 },
+      { code: "159513", name: "大成纳斯达克100ETF (QDII)", prem: 9.89, err: 2.95 },
+      { code: "513110", name: "华泰柏瑞纳斯达克100ETF(QDII)", prem: 9.96, err: 2.31 },
+      { code: "513390", name: "博时纳斯达克100ETF", prem: 10.19, err: 5.29 },
+      { code: "159632", name: "华安纳斯达克100 (QDII)", prem: 10.38, err: 2.00 },
+      { code: "513300", name: "华夏纳斯达克100ETF (QDII)", prem: 11.87, err: 3.23 },
+      { code: "159660", name: "汇添富纳斯达克100ETF", prem: 12.18, err: 7.07 },
+      { code: "513870", name: "富国纳斯达克100ETF (QDII)", prem: 12.69, err: 2.14 },
+      { code: "159659", name: "招商纳斯达克100ETF (QDII)", prem: 13.13, err: 2.43 },
+      { code: "159941", name: "广发纳指100ETF", prem: 15.03, err: 4.35 },
+      { code: "159696", name: "易方达纳斯达克100 (QDII)", prem: 15.22, err: 3.55 },
+      { code: "513100", name: "国泰纳斯达克100 (QDII-ETF)", prem: 15.76, err: 5.00 },
+      { code: "159501", name: "嘉实纳斯达克100ETF (QDII)", prem: 17.63, err: 6.17 }
+    ]
+  };
+
+  var IDXS = ["全部", "标普500", "纳指100", "美国50"];
+  var SORTS = ["prem-asc", "prem-desc", "err-asc", "default"];
+  var REF_CLASS = { "偏差最小": "min", "偏差较小": "low", "偏差中等": "mid", "偏差较大": "high" };
+  var ERR_BY_CODE = {};
+  SNAPSHOT.items.forEach(function (d) { ERR_BY_CODE[d.code] = d.err; });
+
+  var state = {
+    q: "", idx: "全部", sort: "prem-asc",
+    mode: "loading",           // loading | live | snapshot
+    asof: "",
+    fetched: "",
+    items: []                  // 已加工：含 idx/rank/ref/err
+  };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+  var tbody = $("#tbody");
+  var emptyBox = $("#empty");
+  var tableWrap = $("#tableWrap");
+  var statsBox = $("#stats");
+  var qInput = $("#q");
+  var sortSel = $("#sort");
+  var chipsBox = $("#idxChips");
+  var shareBtn = $("#share");
+  var refreshBtn = $("#refresh");
+  var toast = $("#toast");
+  var statusPill = $("#statusPill");
+  var asofEl = $("#asof");
+  var footerNote = $("#sourceNote");
+
+  /* ============ 工具 ============ */
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function market(code) { return code.charAt(0) === "5" ? "sh" : "sz"; }
+  function links(code) {
+    var m = market(code);
+    return {
+      em: "https://quote.eastmoney.com/" + m + code + ".html",
+      tx: "https://gu.qq.com/" + m + code
+    };
+  }
+  function classify(name) {
+    if (/美国50/.test(name)) return "美国50";
+    if (/标普/.test(name)) return "标普500";
+    if (/纳斯达克|纳指/.test(name)) return "纳指100";
+    return "其他";
+  }
+  function premStyle(p, min, max) {
+    var t = max === min ? 0 : (p - min) / (max - min);
+    var hue = Math.round(34 - 34 * t);           // 34 琥珀 → 0 红
+    return "background:hsl(" + hue + " 92% 95%);color:hsl(" + hue + " 78% 33%);border:1px solid hsl(" + hue + " 82% 86%)";
+  }
+  function errColor(e) {
+    if (e <= 3) return "#16a34a";
+    if (e <= 5) return "#f59e0b";
+    return "#dc2626";
+  }
+  function pct(n) { return n.toFixed(2) + "%"; }
+  function refFor(rank, total) {
+    if (rank === 1) return "偏差最小";
+    if (rank <= Math.round(total * 0.28)) return "偏差较小";
+    if (rank <= Math.round(total * 0.67)) return "偏差中等";
+    return "偏差较大";
+  }
+
+  /* 统一加工：补指数、排序定档、算排名 */
+  function prepare(items) {
+    var list = items.map(function (d) {
+      return {
+        code: d.code,
+        name: d.name,
+        prem: Number(d.prem !== undefined && d.prem !== null ? d.prem : d.premium),
+        err: (d.err !== undefined && d.err !== null) ? Number(d.err)
+           : (ERR_BY_CODE[d.code] !== undefined ? ERR_BY_CODE[d.code] : null),
+        price: d.price,
+        iopv: d.iopv,
+        idx: classify(d.name)
+      };
+    }).filter(function (d) { return isFinite(d.prem); });
+
+    list.sort(function (a, b) { return a.prem - b.prem; });
+    list.forEach(function (d, i) {
+      d.rank = i + 1;
+      d.ref = refFor(d.rank, list.length);
+    });
+    return list;
+  }
+
+  function mins(list) {
+    var a = Infinity, b = -Infinity;
+    list.forEach(function (d) { if (d.prem < a) a = d.prem; if (d.prem > b) b = d.prem; });
+    return [a, b];
+  }
+
+  /* ============ 渲染 ============ */
+  function currentList() {
+    var q = state.q.trim().toLowerCase();
+    var list = state.items.filter(function (d) {
+      if (state.idx !== "全部" && d.idx !== state.idx) return false;
+      if (!q) return true;
+      return (d.code + " " + d.name + " " + d.idx).toLowerCase().indexOf(q) !== -1;
+    });
+    var sort = state.sort;
+    list.sort(function (a, b) {
+      if (sort === "prem-desc") return b.prem - a.prem;
+      if (sort === "err-asc") {
+        var ea = a.err === null ? 999 : a.err, eb = b.err === null ? 999 : b.err;
+        return ea - eb || a.rank - b.rank;
+      }
+      if (sort === "default") return a.rank - b.rank;
+      return a.prem - b.prem;
+    });
+    return list;
+  }
+
+  function rowHTML(d, i, min, max) {
+    var l = links(d.code);
+    var errCell;
+    if (d.err === null) {
+      errCell = '<span class="err"><span class="na">—</span></span>';
+    } else {
+      var w = Math.max(8, Math.min(100, (d.err / 8) * 100)).toFixed(1);
+      errCell = '<span class="err"><span class="num">' + pct(d.err) + "</span>" +
+        '<span class="track"><i style="width:' + w + "%;background:" + errColor(d.err) + '"></i></span></span>';
+    }
+    var price = (d.price === undefined || d.price === null) ? "" :
+      '<td class="pi"><span class="p">' + Number(d.price).toFixed(3) + "</span>" +
+      '<span class="slash">/</span><span class="i">' + Number(d.iopv).toFixed(4) + "</span></td>";
+    if (!price) price = '<td class="pi"><span class="na">—</span></td>';
+
+    return "<tr" + (i === 0 && state.sort === "prem-asc" ? ' class="top"' : "") + ">" +
+      '<td class="rank">' + d.rank + "</td>" +
+      '<td><span class="idx-tag">' + esc(d.idx) + "</span></td>" +
+      '<td><a class="code" href="' + l.em + '" target="_blank" rel="noopener">' + esc(d.code) + "</a></td>" +
+      '<td class="etf"><a href="' + l.em + '" target="_blank" rel="noopener">' + esc(d.name) + "</a></td>" +
+      price +
+      '<td><span class="prem" style="' + premStyle(d.prem, min, max) + '">' + pct(d.prem) + "</span></td>" +
+      "<td>" + errCell + "</td>" +
+      '<td><span class="ref ' + REF_CLASS[d.ref] + '">' + esc(d.ref) + "</span></td>" +
+      '<td class="quote"><a href="' + l.em + '" target="_blank" rel="noopener">东财 ↗</a>' +
+        '<a href="' + l.tx + '" target="_blank" rel="noopener">腾讯 ↗</a></td>' +
+      "</tr>";
+  }
+
+  function renderStats(list) {
+    if (!list.length || !state.items.length) { statsBox.innerHTML = ""; return; }
+    var base = state.items;
+    var premSum = 0, errSum = 0, errN = 0;
+    list.forEach(function (d) {
+      premSum += d.prem;
+      if (d.err !== null) { errSum += d.err; errN++; }
+    });
+    var low = base[0];
+    statsBox.innerHTML =
+      '<span class="stat">命中<b>' + list.length + "</b> 只</span>" +
+      '<span class="stat">最低溢价<b>' + pct(low.prem) + "</b> · " + esc(low.code) + "</span>" +
+      '<span class="stat">平均溢价<b>' + pct(premSum / list.length) + "</b></span>" +
+      (errN ? '<span class="stat">平均 1 年跟踪误差<b>' + pct(errSum / errN) + "</b></span>" : "");
+  }
+
+  function render() {
+    var [min, max] = mins(state.items);
+    var list = currentList();
+    tbody.innerHTML = list.map(function (d, i) { return rowHTML(d, i, min, max); }).join("");
+    renderStats(list);
+
+    var loading = state.mode === "loading";
+    emptyBox.textContent = loading ? "正在获取实时行情…" : "没有匹配的 ETF，试试其他代码、名称或指数。";
+    emptyBox.hidden = list.length > 0;
+    tableWrap.hidden = list.length === 0;
+
+    var low = state.items[0];
+    var codeEl = $("#calloutCode");
+    if (low) {
+      var l = links(low.code);
+      codeEl.textContent = low.code;
+      codeEl.href = l.em;
+      $("#calloutName").textContent = low.name;
+      $("#calloutPrem").textContent = "溢价 " + pct(low.prem);
+    } else {
+      codeEl.textContent = "--";
+      codeEl.href = "#";
+      $("#calloutName").textContent = loading ? "正在获取实时行情…" : "--";
+      $("#calloutPrem").textContent = "溢价 --";
+    }
+  }
+
+  function renderMeta() {
+    var live = state.mode === "live";
+    if (state.mode === "loading") {
+      asofEl.textContent = "载入中";
+      statusPill.className = "pill snap";
+      statusPill.textContent = "获取中";
+      footerNote.textContent = "正在从雪球行情获取最新价格与 IOPV…";
+      return;
+    }
+    asofEl.textContent = state.asof || "--";
+    statusPill.className = "pill " + (live ? "live" : "snap");
+    statusPill.textContent = live ? "实时" : "离线快照";
+    footerNote.textContent = live
+      ? "行情 / IOPV / 溢价：腾讯财经公开行情 · 抓取于 " + (state.fetched || "—")
+      : "行情 / IOPV：离线快照（" + SNAPSHOT.asof + "），行情接口未连接";
+  }
+
+  /* ============ 查询链接 ============ */
+  function readHash() {
+    var h = new URLSearchParams(location.hash.replace(/^#/, ""));
+    var q = h.get("q") || "";
+    var idx = h.get("idx") || "全部";
+    var sort = h.get("sort") || "prem-asc";
+    if (IDXS.indexOf(idx) === -1) idx = "全部";
+    if (SORTS.indexOf(sort) === -1) sort = "prem-asc";
+    state.q = q; state.idx = idx; state.sort = sort;
+  }
+  function writeHash() {
+    var p = new URLSearchParams();
+    if (state.q) p.set("q", state.q);
+    if (state.idx !== "全部") p.set("idx", state.idx);
+    if (state.sort !== "prem-asc") p.set("sort", state.sort);
+    var s = p.toString();
+    var target = s ? "#" + s : location.pathname + location.search;
+    try {
+      history.replaceState(null, "", target);
+    } catch (err) {
+      if (s) location.hash = s;
+    }
+  }
+  function syncInputs() {
+    qInput.value = state.q;
+    sortSel.value = state.sort;
+    Array.prototype.forEach.call(chipsBox.children, function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.idx === state.idx));
+    });
+  }
+
+  /* ============ 数据加载 ============ */
+  function applySnapshot() {
+    state.mode = "snapshot";
+    state.asof = SNAPSHOT.asof;
+    state.fetched = "";
+    state.items = prepare(SNAPSHOT.items);
+    renderMeta();
+    render();
+  }
+
+  function applyLive(payload) {
+    state.mode = "live";
+    state.asof = payload.asof || "";
+    state.fetched = payload.fetched || "";
+    state.items = prepare(payload.items || []);
+    if (!state.items.length) throw new Error("空数据");
+    renderMeta();
+    render();
+  }
+
+  var loading = false;
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function nowStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+      " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+  }
+  function fmtTencentTime(s) {
+    if (!s || s.length < 14) return "";
+    return s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8) + " " +
+      s.slice(8, 10) + ":" + s.slice(10, 12) + ":" + s.slice(12, 14);
+  }
+
+  /* 腾讯行情 JSONP：调用后全局会出现 v_sh513650 / v_sz159655 这类字符串 */
+  function loadTencent(cb) {
+    var q = SNAPSHOT.items.map(function (d) { return market(d.code) + d.code; }).join(",");
+    var el = document.createElement("script");
+    el.charset = "gbk";
+    el.async = true;
+    el.src = "https://qt.gtimg.cn/q=" + q + "&_=" + Date.now();
+    var finished = false, timer = null;
+    function finish(err) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      el.onload = el.onerror = null;
+      if (el.parentNode) el.parentNode.removeChild(el);
+      cb(err);
+    }
+    timer = setTimeout(function () { finish(new Error("tencent timeout")); }, 8000);
+    el.onload = function () { finish(null); };
+    el.onerror = function () { finish(new Error("tencent network")); };
+    (document.head || document.documentElement).appendChild(el);
+  }
+
+  function parseTencent() {
+    var out = [];
+    SNAPSHOT.items.forEach(function (d) {
+      var raw = window["v_" + market(d.code) + d.code];
+      if (typeof raw !== "string") return;
+      var f = raw.split("~");
+      var price = parseFloat(f[3]);
+      var iopv = parseFloat(f[78]);
+      var prem = parseFloat(f[77]);
+      if (!isFinite(price)) return;
+      if (!isFinite(iopv) || iopv <= 0) iopv = null;
+      if (!isFinite(prem) && iopv) prem = (price / iopv - 1) * 100;
+      if (!isFinite(prem)) return;
+      out.push({
+        code: d.code,
+        name: f[1] || d.name,
+        price: price,
+        iopv: iopv,
+        prem: prem,
+        time: fmtTencentTime(f[30])
+      });
+    });
+    return out;
+  }
+
+  function refresh(manual) {
+    if (loading) return;
+    loading = true;
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "刷新中…";
+
+    function finish(msg) {
+      loading = false;
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "刷新";
+      if (msg) toastShow(msg);
+    }
+
+    function fallbackServer() {
+      fetch("./api/premium", { cache: "no-store" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        })
+        .then(function (payload) {
+          if (!payload || payload.ok !== true) throw new Error("接口无数据");
+          applyLive(payload);
+          finish(manual ? "已更新 " + (payload.asof || "") : null);
+        })
+        .catch(function () {
+          if (state.mode === "live") {
+            finish("刷新失败，仍显示 " + (state.asof || "上次") + " 的数据");
+          } else {
+            applySnapshot();
+            finish("行情接口连不上，显示 2026-10-23 离线快照");
+          }
+        });
+    }
+
+    loadTencent(function (err) {
+      var items = err ? [] : parseTencent();
+      if (!items.length) { fallbackServer(); return; }
+      try {
+        var asof = items.map(function (d) { return d.time; }).sort().pop() || "";
+        applyLive({ asof: asof, fetched: nowStr(), items: items });
+        finish(manual ? "已更新 " + asof : null);
+      } catch (e) {
+        fallbackServer();
+      }
+    });
+  }
+  function toastShow(msg) {
+    if (msg === undefined) msg = "已更新 " + (state.asof || "");
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(toastShow._t);
+    toastShow._t = setTimeout(function () { toast.classList.remove("show"); }, 2200);
+  }
+
+  /* ============ 交互 ============ */
+  IDXS.forEach(function (idx) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.dataset.idx = idx;
+    b.textContent = idx;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () {
+      state.idx = idx;
+      syncInputs(); writeHash(); render();
+    });
+    chipsBox.appendChild(b);
+  });
+
+  var timer = null;
+  qInput.addEventListener("input", function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      state.q = qInput.value;
+      writeHash(); render();
+    }, 120);
+  });
+
+  sortSel.addEventListener("change", function () {
+    state.sort = sortSel.value;
+    writeHash(); render();
+  });
+
+  refreshBtn.addEventListener("click", function () { refresh(true); });
+
+  shareBtn.addEventListener("click", function () {
+    var url = location.href;
+    var done = function () { toastShow("查询链接已复制，可直接分享"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { window.prompt("复制下面的链接：", url); });
+    } else {
+      window.prompt("复制下面的链接：", url);
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "/" && document.activeElement !== qInput) {
+      e.preventDefault(); qInput.focus(); qInput.select();
+    }
+    if (e.key === "Escape" && document.activeElement === qInput && qInput.value) {
+      qInput.value = ""; state.q = ""; writeHash(); render();
+    }
+  });
+
+  window.addEventListener("hashchange", function () {
+    readHash(); syncInputs(); render();
+  });
+
+  /* ============ 启动 ============ */
+  readHash();
+  syncInputs();
+  state.items = [];
+  renderMeta();
+  render();
+
+  var boot = window.__PREMIUM__;
+  if (boot && boot.ok && boot.items && boot.items.length) {
+    try { applyLive(boot); } catch (e) { state.mode = "loading"; renderMeta(); render(); }
+  }
+
+  refresh(false);
+  setInterval(function () { refresh(false); }, 45000);
+})();
+</script>
+</body>
+</html>
