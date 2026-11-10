@@ -1,0 +1,52 @@
+name: Update microcap data
+
+on:
+  schedule:
+    # 每个工作日 16:35（北京时间，UTC+8）
+    - cron: "35 8 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      NETLIFY_SITE_ID: 13154567-18ce-4844-8176-b8c6834415c5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build microcap data
+        env:
+          MICROCAP_OUT: site/microcap/microcap-data.json
+        run: python scripts/build_microcap.py
+
+      - name: Deploy site to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd site
+          zip -qr ../site.zip .
+          cd ..
+          RESP=$(curl -sS -X POST \
+            -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
+            -H "Content-Type: application/zip" \
+            --data-binary @site.zip \
+            "https://api.netlify.com/api/v1/sites/$NETLIFY_SITE_ID/deploys")
+          echo "$RESP" | head -c 300; echo
+          ID=$(echo "$RESP" | python -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          for i in $(seq 1 30); do
+            STATE=$(curl -sS -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
+              "https://api.netlify.com/api/v1/deploys/$ID" | python -c "import sys,json; print(json.load(sys.stdin)['state'])")
+            echo "deploy state: $STATE"
+            if [ "$STATE" = "ready" ]; then exit 0; fi
+            if [ "$STATE" = "error" ]; then exit 1; fi
+            sleep 5
+          done
+          exit 1
