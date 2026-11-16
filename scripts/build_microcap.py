@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""构建微盘股监测数据。
+"""构建微盘股监测数据（腾讯 + 新浪，不依赖东方财富）。
 
 口径：沪深 A 股中剔除北交所、ST/*ST、退市整理股后，总市值最小的 400 只。
-- 平均总市值 = 400 只总市值的算术平均
-- 微盘等权指数 = 400 只等权收益的链式指数（基期 1000）
-- 历史段使用当前 400 只成分回算（近似，存在成分变动与幸存者偏差）
+- 股票池与总市值：新浪财经 A 股列表
+- 历史日线：腾讯行情（前复权）
+- 平均总市值 = 400 只总市值均值；指数 = 400 只等权收益链式（基期 1000）
+- 历史段用当前 400 只成分回算，属于近似（存在成分变动与幸存者偏差）
 """
 import concurrent.futures
 import json
@@ -17,50 +18,55 @@ from datetime import datetime, timedelta, timezone
 
 OUT = os.environ.get("MICROCAP_OUT") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "microcap-data.json")
-UA = {"User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/"}
-FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
+CN = timezone(timedelta(hours=8))
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36"}
+SINA = ("https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+        "Market_Center.getHQNodeData?page=%d&num=100&sort=symbol&asc=1&node=hs_a")
+TENCENT = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=%s,day,%s,%s,640,qfq"
+START = "2018-01-01"
 
 
-def get_json(url, tries=3):
+def _get(url, headers, enc="utf-8", tries=3):
     for _ in range(tries):
         try:
-            req = urllib.request.Request(url, headers=UA)
+            req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=25) as r:
-                return json.loads(r.read().decode())
+                return r.read().decode(enc, "replace")
         except Exception:
-            continue
-    return {}
+            time.sleep(0.4)
+    return ""
 
 
-def spot_page(pn):
-    q = {"pn": pn, "pz": 100, "po": 0, "np": 1, "fltt": 2, "invt": 2, "fid": "f20",
-         "fs": FS, "fields": "f12,f13,f14,f20,f2,f3"}
-    return get_json("https://push2.eastmoney.com/api/qt/clist/get?" + urllib.parse.urlencode(q))
+def sina_page(page):
+    txt = _get(SINA % page, dict(UA, Referer="https://finance.sina.com.cn/"))
+    try:
+        d = json.loads(txt)
+        return d if isinstance(d, list) else []
+    except Exception:
+        return []
 
 
 def fetch_universe():
-    first = spot_page(1)
-    total = (first.get("data") or {}).get("total") or 0
-    pages = (total + 99) // 100
     rows = []
-    for attempt in range(4):
-        rows = list((first.get("data") or {}).get("diff") or [])
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-            for d in pool.map(spot_page, range(2, pages + 1)):
-                rows.extend((d.get("data") or {}).get("diff") or [])
-        print("universe attempt %d: %d / %d" % (attempt + 1, len(rows), total))
-        if len(rows) >= total * 0.95:
-            return rows
-        time.sleep(2)
-    raise SystemExit("universe incomplete: %d/%d" % (len(rows), total))
+    for page in range(1, 90):
+        batch = sina_page(page)
+        if not batch:
+            break
+        rows.extend(batch)
+        if len(batch) < 100:
+            break
+        time.sleep(0.05)
+    print("universe:", len(rows))
+    if len(rows) < 4500:
+        raise SystemExit("universe too small: %d" % len(rows))
+    return rows
 
 
-def is_bse(code):
-    return code.startswith(("4", "8", "92"))
+def is_bse(symbol, code):
+    return symbol.startswith("bj") or code.startswith(("4", "8", "92"))
 
 
 def is_excluded_name(name):
-    """ST / *ST / SST / S*ST / 退市整理（xx退、退市xx）等一律剔除。"""
     n = unicodedata.normalize("NFKC", name or "").upper()
     return ("ST" in n) or ("退" in n)
 
@@ -68,38 +74,53 @@ def is_excluded_name(name):
 def pick(rows, n=400):
     valid = []
     for x in rows:
-        code, name = x.get("f12"), x.get("f14") or ""
+        symbol, code = x.get("symbol", ""), str(x.get("code", ""))
+        name = x.get("name", "")
+        if is_bse(symbol, code) or is_excluded_name(name):
+            continue
         try:
-            cap = float(x.get("f20"))
-            price = float(x.get("f2"))
+            cap = float(x.get("mktcap")) * 1e4      # 万元 -> 元
+            price = float(x.get("trade"))
         except (TypeError, ValueError):
             continue
-        if is_bse(code) or cap <= 0 or price <= 0 or is_excluded_name(name):
+        if cap <= 0 or price <= 0:
             continue
-        valid.append({
-            "code": code, "name": name, "cap": cap, "price": price,
-            "chg": x.get("f3"), "shares": cap / price,
-        })
+        valid.append({"code": code, "symbol": symbol, "name": name,
+                      "cap": cap, "price": price, "shares": cap / price})
     valid.sort(key=lambda t: t["cap"])
+    print("valid stocks:", len(valid))
     return valid[:n]
 
 
-def kline(code):
-    market = "1" if code.startswith(("6", "5", "9")) else "0"
-    q = {"secid": "%s.%s" % (market, code), "klt": 101, "fqt": 1,
-         "beg": "20150101", "end": "20500101",
-         "fields1": "f1,f2,f3,f4,f5,f6",
-         "fields2": "f51,f52,f53,f54,f55,f56,f57,f58"}
-    d = get_json("https://push2his.eastmoney.com/api/qt/stock/kline/get?" + urllib.parse.urlencode(q))
-    ks = (d.get("data") or {}).get("klines") or []
-    out = []
-    for k in ks:
-        p = k.split(",")
+def _prev_day(date_str):
+    return (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def kline(symbol):
+    bars = {}
+    end = ""
+    for _ in range(6):
+        txt = _get(TENCENT % (symbol, "", end), UA)
         try:
-            out.append((p[0], float(p[2])))
-        except (IndexError, ValueError):
-            continue
-    return code, out
+            data = json.loads(txt).get("data") or {}
+        except Exception:
+            break
+        node = data.get(symbol) or {}
+        ks = node.get("qfqday") or node.get("day") or []
+        if not ks:
+            break
+        for row in ks:
+            try:
+                close = float(row[2])
+            except (IndexError, ValueError):
+                continue
+            if close > 0:
+                bars[row[0]] = close
+        first = ks[0][0]
+        if first <= START:
+            break
+        end = _prev_day(first)
+    return symbol, [(d, bars[d]) for d in sorted(bars) if d >= START]
 
 
 def tencent_caps(codes):
@@ -108,15 +129,7 @@ def tencent_caps(codes):
     caps = {}
     for i in range(0, len(syms), 60):
         url = "https://qt.gtimg.cn/q=" + ",".join(syms[i:i + 60])
-        txt = ""
-        for _ in range(3):
-            try:
-                req = urllib.request.Request(url, headers=UA)
-                with urllib.request.urlopen(req, timeout=20) as r:
-                    txt = r.read().decode("gb18030", "replace")
-                break
-            except Exception:
-                time.sleep(0.5)
+        txt = _get(url, UA, "gb18030")
         for line in txt.split(";"):
             line = line.strip()
             if not line.startswith("v_"):
@@ -139,40 +152,41 @@ def main():
     items = pick(rows)
     print("constituents:", len(items))
 
-    # 双源校验：东财总市值 vs 腾讯总市值
-    em_avg = sum(x["cap"] for x in items) / len(items)
+    # 双源校验：新浪总市值 vs 腾讯总市值（同一批 400 只）
+    sina_avg = sum(x["cap"] for x in items) / len(items)
     tx = tencent_caps([x["code"] for x in items])
     tx_avg = (sum(tx.values()) / len(tx)) if tx else 0.0
-    diff = abs(em_avg - tx_avg) / em_avg * 100 if tx_avg else 999.0
-    print("cross-check: 东财 %.2f 亿 (%d 只) | 腾讯 %.2f 亿 (%d 只) | 差 %.3f%%"
-          % (em_avg / 1e8, len(items), tx_avg / 1e8, len(tx), diff))
+    diff = abs(sina_avg - tx_avg) / sina_avg * 100 if tx_avg else 999.0
+    print("cross-check: 新浪 %.2f 亿 (%d 只) | 腾讯 %.2f 亿 (%d 只) | 差 %.3f%%"
+          % (sina_avg / 1e8, len(items), tx_avg / 1e8, len(tx), diff))
     if len(tx) < len(items) * 0.9:
         raise SystemExit("tencent caps incomplete: %d/%d" % (len(tx), len(items)))
     if diff > 1.5:
         raise SystemExit("cross-check failed: %.2f%%" % diff)
 
     hist = {}
-    pending = [it["code"] for it in items]
+    pending = [it["symbol"] for it in items]
     for attempt in range(4):
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-            for code, ks in pool.map(kline, pending):
+            for symbol, ks in pool.map(kline, pending):
                 if ks:
-                    hist[code] = ks
-        pending = [c for c in [it["code"] for it in items] if c not in hist]
+                    hist[symbol] = ks
+        pending = [it["symbol"] for it in items if it["symbol"] not in hist]
         print("kline attempt %d: ok %d / %d, missing %d" % (attempt + 1, len(hist), len(items), len(pending)))
         if not pending:
             break
         time.sleep(1.5)
-    if pending:
-        print("still missing:", pending[:10])
+
+    if len(hist) < len(items) * 0.95:
+        raise SystemExit("kline incomplete: %d/%d" % (len(hist), len(items)))
 
     day_ret = {}
     day_cap = {}
     for it in items:
-        ks = hist.get(it["code"]) or []
+        ks = hist.get(it["symbol"]) or []
         prev = None
         for date, close in ks:
-            if prev is not None and prev > 0 and close > 0:
+            if prev is not None and prev > 0:
                 r = close / prev - 1.0
                 a = day_ret.setdefault(date, [0.0, 0])
                 a[0] += r
@@ -205,10 +219,10 @@ def main():
     if coverage[-1] < len(items) * 0.95:
         raise SystemExit("coverage too low: %d/%d, refuse to publish" % (coverage[-1], len(items)))
 
-    chg = [float(x["chg"]) for x in items if isinstance(x["chg"], (int, float))]
+    chg = [float(x.get("changepercent")) for x in rows if isinstance(x.get("changepercent"), (int, float))]
     payload = {
         "updated": dates[-1],
-        "built_at": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
+        "built_at": datetime.now(CN).strftime("%Y-%m-%d %H:%M:%S"),
         "count": len(items),
         "avg_cap": round(sum(x["cap"] for x in items) / len(items) / 1e8, 2),
         "avg_cap_tx": round(tx_avg / 1e8, 2) if tx_avg else None,
@@ -224,7 +238,7 @@ def main():
         "coverage": coverage,
         "constituents": [
             {"code": x["code"], "name": x["name"], "cap": round(x["cap"] / 1e8, 2),
-             "price": x["price"], "chg": x["chg"]}
+             "price": x["price"], "chg": x.get("changepercent")}
             for x in items
         ],
     }
@@ -232,7 +246,6 @@ def main():
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
     print("dates:", len(dates), dates[0], "->", dates[-1])
     print("avg cap:", payload["avg_cap"], "index:", index[-1], "ew_chg:", payload["ew_chg"])
-    print("excluded ST/退 remaining:", sum(1 for c in items if is_excluded_name(c["name"])))
     print("saved:", OUT, os.path.getsize(OUT), "bytes")
 
 
