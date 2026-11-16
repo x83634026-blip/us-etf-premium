@@ -9,6 +9,7 @@
 import concurrent.futures
 import json
 import os
+import time
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -40,11 +41,18 @@ def spot_page(pn):
 def fetch_universe():
     first = spot_page(1)
     total = (first.get("data") or {}).get("total") or 0
-    rows = list((first.get("data") or {}).get("diff") or [])
-    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-        for d in pool.map(spot_page, range(2, (total + 99) // 100 + 1)):
-            rows.extend((d.get("data") or {}).get("diff") or [])
-    return rows
+    pages = (total + 99) // 100
+    rows = []
+    for attempt in range(4):
+        rows = list((first.get("data") or {}).get("diff") or [])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            for d in pool.map(spot_page, range(2, pages + 1)):
+                rows.extend((d.get("data") or {}).get("diff") or [])
+        print("universe attempt %d: %d / %d" % (attempt + 1, len(rows), total))
+        if len(rows) >= total * 0.95:
+            return rows
+        time.sleep(2)
+    raise SystemExit("universe incomplete: %d/%d" % (len(rows), total))
 
 
 def is_bse(code):
@@ -100,11 +108,19 @@ def main():
     print("constituents:", len(items))
 
     hist = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-        for code, ks in pool.map(kline, [it["code"] for it in items]):
-            hist[code] = ks
-    got = sum(1 for v in hist.values() if v)
-    print("kline ok:", got, "/", len(items))
+    pending = [it["code"] for it in items]
+    for attempt in range(4):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            for code, ks in pool.map(kline, pending):
+                if ks:
+                    hist[code] = ks
+        pending = [c for c in [it["code"] for it in items] if c not in hist]
+        print("kline attempt %d: ok %d / %d, missing %d" % (attempt + 1, len(hist), len(items), len(pending)))
+        if not pending:
+            break
+        time.sleep(1.5)
+    if pending:
+        print("still missing:", pending[:10])
 
     day_ret = {}
     day_cap = {}
@@ -140,6 +156,10 @@ def main():
             start = i
             break
     dates, index, avgcap, coverage = dates[start:], index[start:], avgcap[start:], coverage[start:]
+
+    print("latest coverage:", coverage[-1], "/", len(items))
+    if coverage[-1] < len(items) * 0.95:
+        raise SystemExit("coverage too low: %d/%d, refuse to publish" % (coverage[-1], len(items)))
 
     chg = [float(x["chg"]) for x in items if isinstance(x["chg"], (int, float))]
     payload = {
