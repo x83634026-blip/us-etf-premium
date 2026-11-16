@@ -101,6 +101,7 @@ def kline(symbol):
     end = ""
     for _ in range(6):
         txt = _get(TENCENT % (symbol, "", end), UA)
+        time.sleep(0.06)
         try:
             data = json.loads(txt).get("data") or {}
         except Exception:
@@ -166,8 +167,9 @@ def main():
 
     hist = {}
     pending = [it["symbol"] for it in items]
-    for attempt in range(4):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+    for attempt in range(6):
+        workers = 3 if attempt < 3 else 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
             for symbol, ks in pool.map(kline, pending):
                 if ks:
                     hist[symbol] = ks
@@ -175,7 +177,7 @@ def main():
         print("kline attempt %d: ok %d / %d, missing %d" % (attempt + 1, len(hist), len(items), len(pending)))
         if not pending:
             break
-        time.sleep(1.5)
+        time.sleep(4 + attempt * 2)
 
     if len(hist) < len(items) * 0.95:
         raise SystemExit("kline incomplete: %d/%d" % (len(hist), len(items)))
