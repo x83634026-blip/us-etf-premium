@@ -102,10 +102,54 @@ def kline(code):
     return code, out
 
 
+def tencent_caps(codes):
+    """用腾讯行情复核这 400 只的总市值（字段 45，单位亿元）。"""
+    syms = [("sh" if c.startswith(("6", "9")) else "sz") + c for c in codes]
+    caps = {}
+    for i in range(0, len(syms), 60):
+        url = "https://qt.gtimg.cn/q=" + ",".join(syms[i:i + 60])
+        txt = ""
+        for _ in range(3):
+            try:
+                req = urllib.request.Request(url, headers=UA)
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    txt = r.read().decode("gb18030", "replace")
+                break
+            except Exception:
+                time.sleep(0.5)
+        for line in txt.split(";"):
+            line = line.strip()
+            if not line.startswith("v_"):
+                continue
+            _, _, val = line.partition("=")
+            f = val.strip().strip('"').split("~")
+            if len(f) < 46:
+                continue
+            try:
+                cap_yi = float(f[45])
+            except (TypeError, ValueError):
+                continue
+            if cap_yi > 0:
+                caps[f[2]] = cap_yi * 1e8
+    return caps
+
+
 def main():
     rows = fetch_universe()
     items = pick(rows)
     print("constituents:", len(items))
+
+    # 双源校验：东财总市值 vs 腾讯总市值
+    em_avg = sum(x["cap"] for x in items) / len(items)
+    tx = tencent_caps([x["code"] for x in items])
+    tx_avg = (sum(tx.values()) / len(tx)) if tx else 0.0
+    diff = abs(em_avg - tx_avg) / em_avg * 100 if tx_avg else 999.0
+    print("cross-check: 东财 %.2f 亿 (%d 只) | 腾讯 %.2f 亿 (%d 只) | 差 %.3f%%"
+          % (em_avg / 1e8, len(items), tx_avg / 1e8, len(tx), diff))
+    if len(tx) < len(items) * 0.9:
+        raise SystemExit("tencent caps incomplete: %d/%d" % (len(tx), len(items)))
+    if diff > 1.5:
+        raise SystemExit("cross-check failed: %.2f%%" % diff)
 
     hist = {}
     pending = [it["code"] for it in items]
@@ -167,6 +211,10 @@ def main():
         "built_at": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
         "count": len(items),
         "avg_cap": round(sum(x["cap"] for x in items) / len(items) / 1e8, 2),
+        "avg_cap_tx": round(tx_avg / 1e8, 2) if tx_avg else None,
+        "verify_diff_pct": round(diff, 3) if tx_avg else None,
+        "verify_count": len(tx),
+        "verify_ok": bool(tx_avg) and diff <= 1.5,
         "median_cap": round(sorted(x["cap"] for x in items)[len(items) // 2] / 1e8, 2),
         "total_cap": round(sum(x["cap"] for x in items) / 1e8, 2),
         "ew_chg": round(sum(chg) / len(chg), 2) if chg else None,
