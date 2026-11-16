@@ -246,7 +246,11 @@
   function renderKpis() {
     var d = DATA;
     $("#avgCap").innerHTML = fmt(d.avg_cap, 2) + "<small>亿元</small>";
-    $("#medianCap").textContent = "中位数 " + fmt(d.median_cap, 2) + " 亿元";
+    var verify = "";
+    if (d.avg_cap_tx !== null && d.avg_cap_tx !== undefined) {
+      verify = " · 腾讯校验 " + fmt(d.avg_cap_tx, 2) + " 亿（差 " + fmt(d.verify_diff_pct, 2) + "%）" + (d.verify_ok ? " ✓" : " ⚠");
+    }
+    $("#medianCap").textContent = "中位数 " + fmt(d.median_cap, 2) + " 亿元" + verify;
     $("#indexVal").textContent = fmt(d.index[d.index.length - 1], 2);
     var chg = d.ew_chg;
     var el = $("#indexChg");
