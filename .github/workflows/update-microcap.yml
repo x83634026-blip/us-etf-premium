@@ -2,8 +2,9 @@ name: Update microcap data
 
 on:
   schedule:
-    # 每个工作日 16:35（北京时间，UTC+8）
-    - cron: "35 8 * * 1-5"
+    # 每个工作日 16:20 与 18:05（北京时间），第二次作为排队/限流的兜底
+    - cron: "20 8 * * 1-5"
+    - cron: "5 10 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -21,10 +22,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build microcap data
-        env:
-          MICROCAP_OUT: site/microcap/microcap-data.json
-        run: python scripts/build_microcap.py
+      - name: Update microcap data (incremental)
+        run: python scripts/update_microcap.py
 
       - name: Deploy site to Netlify
         env:
