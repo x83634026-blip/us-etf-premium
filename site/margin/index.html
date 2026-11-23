@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A股两融余额 / M2 · 杠杆温度</title>
+<meta name="description" content="A股两融余额每日更新，以及与M2的比值走势。">
+<style>
+  :root{--navy:#0b2239;--ink:#1f2937;--muted:#6b7a8c;--line:#e5ebf2;--bg:#f3f6fa;--accent:#1d4ed8;--red:#c0392b;--green:#0f7a43}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.55;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1160px;margin:0 auto;padding:28px 20px 44px}
+  .topnav{display:flex;gap:6px;justify-content:center;margin:0 0 12px;flex-wrap:wrap}
+  .topnav a{font-size:13px;color:#54677b;text-decoration:none;padding:7px 14px;border-radius:999px;
+            border:1px solid #d9e1ea;background:#fff;transition:.15s}
+  .topnav a:hover{border-color:#a9c3dc;color:#0f2f4d}
+  .topnav a.active{background:#0f2f4d;border-color:#0f2f4d;color:#fff;font-weight:600}
+  .hero{position:relative;overflow:hidden;text-align:center;color:#fff;border-radius:18px;padding:30px 26px 26px;
+        background:radial-gradient(1100px 260px at 50% -90%,#23527c 0%,transparent 62%),linear-gradient(135deg,#0a2036 0%,#12395c 55%,#0a2540 100%);
+        box-shadow:0 18px 44px -26px rgba(10,37,64,.6)}
+  .hero::after{content:"";position:absolute;inset:0;pointer-events:none;
+               background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:100% 34px}
+  .hero > *{position:relative;z-index:1}
+  h1{margin:0 0 10px;font-size:clamp(22px,3.1vw,30px);font-weight:700;letter-spacing:.06em}
+  .meta{margin:0;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;color:#a9c3dc;font-size:13.5px}
+  .meta .sep{color:#3f6285}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;letter-spacing:.04em;padding:2px 9px;border-radius:999px;
+        color:#bfe3d6;border:1px solid rgba(126,217,176,.35);background:rgba(23,163,110,.16)}
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:#43d99a;box-shadow:0 0 6px #43d99a}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0 0}
+  @media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:0 10px 26px -24px rgba(16,40,64,.45)}
+  .kpi .label{font-size:12.5px;color:var(--muted)}
+  .kpi .value{font-size:26px;font-weight:700;color:#0f2f4d;margin-top:2px;font-variant-numeric:tabular-nums}
+  .kpi .value small{font-size:13px;font-weight:600;color:#7c8a9a;margin-left:3px}
+  .kpi .sub{font-size:12px;color:#8a99aa;margin-top:2px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:16px;margin-top:14px;box-shadow:0 22px 44px -38px rgba(12,40,70,.5)}
+  .panel-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px 0}
+  .panel-head h2{margin:0;font-size:15px;font-weight:700;color:#0f2f4d;letter-spacing:.02em}
+  .legend{display:flex;gap:16px;align-items:center;font-size:12.5px;color:#5b6b7d;flex-wrap:wrap}
+  .legend i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  .spacer{flex:1}
+  .seg{display:flex;background:#eef2f7;border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;font-size:12.5px;color:#54677b;padding:5px 11px;border-radius:7px;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:#fff;color:#0f2f4d;font-weight:600;box-shadow:0 1px 2px rgba(16,40,64,.14)}
+  .chart-box{position:relative;padding:6px 10px 12px}
+  svg.chart{display:block;width:100%;height:auto}
+  .tip{position:absolute;pointer-events:none;background:rgba(15,42,70,.94);color:#fff;padding:8px 10px;border-radius:8px;
+       font-size:12px;line-height:1.6;white-space:nowrap;transform:translate(-50%,-100%);opacity:0;transition:opacity .12s;z-index:5}
+  .tip.show{opacity:1}
+  .table-wrap{overflow-x:auto;border-top:1px solid #eef2f7}
+  table{width:100%;border-collapse:collapse}
+  thead th{padding:10px 12px;text-align:right;white-space:nowrap;font-size:12px;font-weight:600;letter-spacing:.04em;
+           color:#e8f1fa;background:linear-gradient(180deg,#16375a,#122e4c)}
+  thead th:first-child{text-align:left}
+  tbody td{padding:9px 12px;font-size:13.5px;text-align:right;border-top:1px solid #eef2f7;white-space:nowrap;font-variant-numeric:tabular-nums}
+  tbody td:first-child{text-align:left;color:#5b6b7d}
+  tbody tr:hover td{background:#f6faff}
+  .note{padding:14px 18px 18px;font-size:12px;color:#8a99aa;line-height:1.9;border-top:1px solid #eef2f7}
+  footer{margin-top:20px;color:#8a99aa;font-size:12px;text-align:center;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="topnav">
+    <a href="../">ETF 溢价榜</a>
+    <a href="../microcap/">微盘股监测</a>
+    <a href="./" class="active">两融 / M2</a>
+  </nav>
+
+  <header class="hero">
+    <h1>A股两融余额 / M2</h1>
+    <p class="meta">
+      <span class="pill" id="asofPill">载入中</span>
+      <span id="asofText">--</span>
+      <span class="sep">|</span>
+      <span>两融日度更新 · M2 月度</span>
+    </p>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi">
+      <div class="label">两融余额（沪深合计）</div>
+      <div class="value" id="marginVal">--<small>万亿</small></div>
+      <div class="sub" id="marginSub">--</div>
+    </div>
+    <div class="kpi">
+      <div class="label">M2 余额</div>
+      <div class="value" id="m2Val">--<small>万亿</small></div>
+      <div class="sub" id="m2Sub">--</div>
+    </div>
+    <div class="kpi">
+      <div class="label">两融 / M2</div>
+      <div class="value" id="ratioVal">--<small>%</small></div>
+      <div class="sub" id="ratioSub">--</div>
+    </div>
+    <div class="kpi">
+      <div class="label">月度比值峰值</div>
+      <div class="value" id="peakVal">--<small>%</small></div>
+      <div class="sub" id="peakSub">--</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>两融余额（日）</h2>
+      <div class="legend"><span><i style="background:#c0392b"></i>两融余额（万亿，左轴）</span></div>
+      <div class="spacer"></div>
+      <div class="seg" id="rangeSeg">
+        <button data-range="1y" type="button">近1年</button>
+        <button data-range="3y" type="button">近3年</button>
+        <button data-range="all" type="button" aria-pressed="true">全部</button>
+      </div>
+    </div>
+    <div class="chart-box" id="chartBoxA">
+      <svg class="chart" id="chartA" viewBox="0 0 1000 360" preserveAspectRatio="none"></svg>
+      <div class="tip" id="tipA"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>两融余额 / M2（月）</h2>
+      <div class="legend"><span><i style="background:#5b7a99"></i>月度比值（%，左轴）</span></div>
+    </div>
+    <div class="chart-box" id="chartBoxB">
+      <svg class="chart" id="chartB" viewBox="0 0 1000 320" preserveAspectRatio="none"></svg>
+      <div class="tip" id="tipB"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head" style="padding-bottom:0"><h2>最近 12 个月</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>月份</th><th>两融余额（万亿）</th><th>M2（万亿）</th><th>两融/M2（%）</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="note">
+      <b>口径：</b>两融余额为沪深两市融资融券余额合计，日度更新；M2 为央行公布的广义货币供应量，月度更新；比值中的 M2 取最新公布值。<br>
+      <b>数据来源：</b>东方财富数据中心（两融汇总、货币供应量）。
+    </div>
+  </section>
+
+  <footer>仅供研究参考，不构成投资建议</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var DATA = null, state = { range: "all" };
+  var $ = function (s) { return document.querySelector(s); };
+  function fmt(n, d) { return (n === null || n === undefined || isNaN(n)) ? "--" : Number(n).toFixed(d === undefined ? 2 : d); }
+
+  fetch("./data.json", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (d) {
+      DATA = d;
+      $("#asofPill").textContent = "已更新";
+      $("#asofText").textContent = d.updated + " · 两融日度 / M2 月度";
+      renderKpis(); drawA(state.range); drawB(); renderTable();
+    })
+    .catch(function () { $("#asofPill").textContent = "数据加载失败"; $("#asofText").textContent = "请刷新重试"; });
+
+  function renderKpis() {
+    var daily = DATA.margin_daily, last = daily[daily.length - 1];
+    var m2 = DATA.m2[DATA.m2.length - 1];
+    var ratio = last.v / m2.v * 100;
+    var prev = daily[daily.length - 2] || last;
+    var peak = DATA.monthly.reduce(function (a, b) { return b.ratio > a.ratio ? b : a; }, DATA.monthly[0]);
+    $("#marginVal").innerHTML = fmt(last.v, 2) + "<small>万亿</small>";
+    $("#marginSub").textContent = last.d + " · 较前一日 " + (last.v - prev.v >= 0 ? "+" : "") + fmt(last.v - prev.v, 3) + " 万亿";
+    $("#m2Val").innerHTML = fmt(m2.v, 2) + "<small>万亿</small>";
+    $("#m2Sub").textContent = m2.m + " 数据";
+    $("#ratioVal").innerHTML = fmt(ratio, 2) + "<small>%</small>";
+    $("#ratioSub").textContent = "按最新 M2 计算";
+    $("#peakVal").innerHTML = fmt(peak.ratio, 2) + "<small>%</small>";
+    $("#peakSub").textContent = peak.m + " 创下";
+  }
+
+  var W = 1000, L = 58, R = 24, T = 20, B = 34;
+
+  function axis(svg, H, mn, mx, labels, xOf, yOf, fmtV) {
+    for (var t = 0; t <= 5; t++) {
+      var yy = T + (H - T - B) * t / 5;
+      var vv = mx - (mx - mn) * t / 5;
+      svg.push('<line x1="' + L + '" y1="' + yy.toFixed(1) + '" x2="' + (W - R) + '" y2="' + yy.toFixed(1) + '" stroke="#eef2f7"/>');
+      svg.push('<text x="' + (L - 8) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="#8a99aa">' + fmtV(vv) + "</text>");
+    }
+    labels.forEach(function (lab) {
+      svg.push('<text x="' + lab.x.toFixed(1) + '" y="' + (H - B + 20) + '" text-anchor="middle" font-size="11" fill="#8a99aa">' + lab.t + "</text>");
+    });
+  }
+
+  function drawA(range) {
+    if (!DATA) return;
+    var all = DATA.margin_daily, n = all.length, start = 0, H = 360;
+    if (range === "1y") start = Math.max(0, n - 244);
+    if (range === "3y") start = Math.max(0, n - 732);
+    var items = all.slice(start), m = items.length;
+    var vals = items.map(function (x) { return x.v; });
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    var pad = (mx - mn) * 0.1 || 0.05; mn = Math.max(0, mn - pad); mx += pad;
+    function x(i) { return m <= 1 ? L : L + (i / (m - 1)) * (W - L - R); }
+    function y(v) { return T + (mx - v) / (mx - mn) * (H - T - B); }
+    var svg = [];
+    var labels = [];
+    for (var k = 0; k <= 5; k++) {
+      var xi = Math.round((m - 1) * k / 5);
+      labels.push({ x: x(xi), t: items[xi].d.slice(2, 7) });
+    }
+    axis(svg, H, mn, mx, labels, x, y, function (v) { return v.toFixed(2); });
+    var d = "";
+    for (var i = 0; i < m; i++) { d += (i ? "L" : "M") + x(i).toFixed(1) + "," + y(vals[i]).toFixed(1); }
+    svg.push('<path d="' + d + 'L' + x(m - 1).toFixed(1) + "," + (H - B) + 'L' + x(0).toFixed(1) + "," + (H - B) + 'Z" fill="rgba(192,57,43,.06)"/>');
+    svg.push('<path d="' + d + '" fill="none" stroke="#c0392b" stroke-width="1.8"/>');
+    svg.push('<circle cx="' + x(m - 1).toFixed(1) + '" cy="' + y(vals[m - 1]).toFixed(1) + '" r="4" fill="#c0392b"/>');
+    $("#chartA").innerHTML = svg.join("");
+    chartA = { items: items, x: x, y: y, m: m, H: H };
+  }
+
+  function drawB() {
+    if (!DATA) return;
+    var items = DATA.monthly, m = items.length, H = 320;
+    var vals = items.map(function (x) { return x.ratio; });
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    mn = 0; mx += (mx - Math.min.apply(null, vals)) * 0.1 || 0.1;
+    function x(i) { return m <= 1 ? L : L + (i / (m - 1)) * (W - L - R); }
+    function y(v) { return T + (mx - v) / (mx - mn) * (H - T - B); }
+    var svg = [], labels = [];
+    for (var k = 0; k <= 5; k++) {
+      var xi = Math.round((m - 1) * k / 5);
+      labels.push({ x: x(xi), t: items[xi].m });
+    }
+    axis(svg, H, mn, mx, labels, x, y, function (v) { return v.toFixed(1); });
+    var d = "";
+    for (var i = 0; i < m; i++) { d += (i ? "L" : "M") + x(i).toFixed(1) + "," + y(vals[i]).toFixed(1); }
+    svg.push('<path d="' + d + 'L' + x(m - 1).toFixed(1) + "," + (H - B) + 'L' + x(0).toFixed(1) + "," + (H - B) + 'Z" fill="rgba(91,122,153,.07)"/>');
+    svg.push('<path d="' + d + '" fill="none" stroke="#5b7a99" stroke-width="2"/>');
+    svg.push('<circle cx="' + x(m - 1).toFixed(1) + '" cy="' + y(vals[m - 1]).toFixed(1) + '" r="4" fill="#5b7a99"/>');
+    $("#chartB").innerHTML = svg.join("");
+    chartB = { items: items, x: x, y: y, m: m, H: H };
+  }
+
+  var chartA = null, chartB = null;
+  function bindHover(boxId, tipId, getState, valueOf, renderTip) {
+    var box = document.getElementById(boxId), tip = document.getElementById(tipId);
+    box.addEventListener("mousemove", function (e) {
+      var st = getState(); if (!st) return;
+      var rect = box.getBoundingClientRect(), scale = W / rect.width;
+      var px = (e.clientX - rect.left) * scale;
+      var i = Math.round((px - L) / (W - L - R) * (st.m - 1));
+      i = Math.max(0, Math.min(st.m - 1, i));
+      var it = st.items[i];
+      tip.innerHTML = renderTip(it);
+      tip.style.left = (st.x(i) / scale) + "px";
+      tip.style.top = (st.y(valueOf(it)) / (rect.height / st.H) - 10) + "px";
+      tip.classList.add("show");
+    });
+    box.addEventListener("mouseleave", function () { tip.classList.remove("show"); });
+  }
+  bindHover("chartBoxA", "tipA", function () { return chartA; }, function (it) { return it.v; }, function (it) {
+    return "<b>" + it.d + "</b><br>两融余额 " + fmt(it.v, 3) + " 万亿";
+  });
+  bindHover("chartBoxB", "tipB", function () { return chartB; }, function (it) { return it.ratio; }, function (it) {
+    return "<b>" + it.m + "</b><br>两融 " + fmt(it.margin, 2) + " 万亿<br>M2 " + fmt(it.m2, 2) + " 万亿<br>比值 " + fmt(it.ratio, 2) + "%";
+  });
+
+  function renderTable() {
+    var items = DATA.monthly.slice(-12).reverse();
+    $("#tbody").innerHTML = items.map(function (it) {
+      return "<tr><td>" + it.m + "</td><td>" + fmt(it.margin, 2) + "</td><td>" + fmt(it.m2, 2) + "</td><td>" + fmt(it.ratio, 3) + "</td></tr>";
+    }).join("");
+  }
+
+  Array.prototype.forEach.call($("#rangeSeg").children, function (b) {
+    b.addEventListener("click", function () {
+      state.range = b.dataset.range;
+      Array.prototype.forEach.call($("#rangeSeg").children, function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      drawA(state.range);
+    });
+  });
+  window.addEventListener("resize", function () { drawA(state.range); drawB(); });
+})();
+</script>
+</body>
+</html>
