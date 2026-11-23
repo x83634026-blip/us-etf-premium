@@ -24,6 +24,7 @@ SINA = ("https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
 TENCENT = "https://qt.gtimg.cn/q="
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("MICROCAP_DATA") or os.path.join(HERE, "..", "site", "microcap", "microcap-data.json")
+LIVE = os.environ.get("MICROCAP_LIVE") or "https://us-etf-premium.netlify.app/microcap/microcap-data.json"
 
 
 def _get(url, enc="utf-8", tries=3):
@@ -113,9 +114,24 @@ def trade_date():
         return datetime.now(CN).strftime("%Y-%m-%d")
 
 
+def load_base(path):
+    """优先用线上最新数据作为基准，避免每次从仓库里的旧副本重算导致丢天。"""
+    local = json.load(open(path, encoding="utf-8"))
+    best = local
+    try:
+        txt = _get(LIVE, tries=2)
+        remote = json.loads(txt)
+        if remote.get("dates") and local.get("dates") and remote["dates"][-1] > local["dates"][-1]:
+            print("use live base:", remote["dates"][-1], ">", local["dates"][-1])
+            best = remote
+    except Exception:
+        pass
+    return best
+
+
 def main():
     path = os.path.abspath(DATA)
-    base = json.load(open(path, encoding="utf-8"))
+    base = load_base(path)
     rows = fetch_sina()
     print("sina rows:", len(rows))
     if len(rows) < 4500:
