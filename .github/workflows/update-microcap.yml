@@ -8,6 +8,7 @@ on:
     - cron: "25 8 * * 1-5"   # 16:25
     - cron: "50 8 * * 1-5"   # 16:50
     - cron: "20 10 * * 1-5"  # 18:20 兜底
+    - cron: "30 12 * * 1-5"  # 20:30 两融数据通常晚间公布
   workflow_dispatch:
 
 permissions:
