@@ -1,4 +1,4 @@
-name: Update microcap data
+name: Update market data
 
 on:
   schedule:
@@ -17,7 +17,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     env:
-      NETLIFY_SITE_ID: 13154567-18ce-4844-8176-b8c6834415c5
+      MICROCAP_LIVE: https://comprehensive-leopon-d9a1f8abbed-1539785154.tcloudbaseapp.com/microcap/microcap-data.json
     steps:
       - uses: actions/checkout@v4
 
@@ -28,27 +28,20 @@ jobs:
       - name: Update microcap data (incremental)
         run: python scripts/update_microcap.py
 
-      - name: Deploy site to Netlify
+      - name: Update margin / M2 data
+        run: python scripts/update_margin.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Deploy to Tencent CloudBase
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
+          TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
+          TCB_ENV_ID: ${{ secrets.TCB_ENV_ID }}
         run: |
           set -euo pipefail
-          cd site
-          zip -qr ../site.zip .
-          cd ..
-          RESP=$(curl -sS -X POST \
-            -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
-            -H "Content-Type: application/zip" \
-            --data-binary @site.zip \
-            "https://api.netlify.com/api/v1/sites/$NETLIFY_SITE_ID/deploys")
-          echo "$RESP" | head -c 300; echo
-          ID=$(echo "$RESP" | python -c "import sys,json; print(json.load(sys.stdin)['id'])")
-          for i in $(seq 1 30); do
-            STATE=$(curl -sS -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
-              "https://api.netlify.com/api/v1/deploys/$ID" | python -c "import sys,json; print(json.load(sys.stdin)['state'])")
-            echo "deploy state: $STATE"
-            if [ "$STATE" = "ready" ]; then exit 0; fi
-            if [ "$STATE" = "error" ]; then exit 1; fi
-            sleep 5
-          done
-          exit 1
+          npm i -g @cloudbase/cli --registry https://registry.npmmirror.com --silent
+          tcb login --apiKeyId "$TCB_SECRET_ID" --apiKey "$TCB_SECRET_KEY"
+          tcb hosting deploy site / -e "$TCB_ENV_ID"
